@@ -19,7 +19,7 @@ const DashboardLayout = () => {
             }
             try {
                 const config = { headers: { 'x-auth-token': token } };
-                const res = await axios.get('http://localhost:5000/api/auth', config);
+                const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/auth`, config);
                 setUser(res.data);
             } catch (error) {
                 console.error("Failed to fetch user role", error);
