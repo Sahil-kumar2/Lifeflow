@@ -6,8 +6,8 @@ LifeFlow is a full-stack MERN web application designed to bridge the critical ga
 
 ## 🚀 Live Demo
 
-- **Frontend (Vercel):** https://your-vercel-link.vercel.app  
-- **Backend (Render):** https://your-render-backend.onrender.com  
+- **Frontend (Vercel):** https://lifeflow-seven.vercel.app  
+- **Backend (Render):** https://lifeflow-ghm3.onrender.com 
 
 ---
 
