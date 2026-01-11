@@ -26,6 +26,8 @@ const startServer = async () => {
     app.use('/api/hospitals', require('./routes/api/hospitals'));
     app.use('/api/donors', require('./routes/api/donors'));
 
+    app.use('/api/chat', require('./routes/api/chat'));
+
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => console.log(`🚀 Server is running on http://localhost:${PORT}`));
 };

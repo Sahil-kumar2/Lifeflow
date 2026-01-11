@@ -17,7 +17,7 @@ const RegisterPage = () => {
             const { longitude, latitude } = position.coords;
             try {
                 const newUser = { ...formData, longitude, latitude };
-                const res = await axios.post('http://localhost:5000/api/auth/register', newUser);
+                const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/register`, newUser);
                 localStorage.setItem('token', res.data.token);
                 
                 alert('Registration successful!');

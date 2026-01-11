@@ -10,6 +10,8 @@ import Footer from './components/layout/Footer'; // Import our new Footer
 import PrivateRoute from './components/PrivateRoute';
 import DashboardLayout from './components/layout/DashboardLayout';
 
+import Chatbot from './components/Chatbot';
+
 // Import Pages
 import HomePage from './pages/HomePage';
 import AboutPage from './pages/AboutPage'; // Import our new About Page
@@ -24,6 +26,9 @@ function App() {
     <Router>
       <div className="flex flex-col min-h-screen">
         <Toaster position="top-right" />
+        
+        <Chatbot />
+        
         <Navbar /> 
         <main className="flex-grow">
           <Routes>

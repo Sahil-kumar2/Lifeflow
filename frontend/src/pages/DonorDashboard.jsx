@@ -27,14 +27,14 @@ const DonorDashboard = () => {
         const config = { headers: { 'x-auth-token': token } };
         try {
             const [userRes, donationLogsRes] = await Promise.all([
-                axios.get('http://localhost:5000/api/auth', config),
-                axios.get('http://localhost:5000/api/donors/donation-logs', config)
+                axios.get(`${import.meta.env.VITE_API_URL}/api/auth`, config),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/donors/donation-logs`, config)
             ]);
             setDonor(userRes.data);
             setDonationCount(donationLogsRes.data.count);
             
             // Fetch nearby requests after main data is loaded
-            const requestsRes = await axios.get('http://localhost:5000/api/donors/nearby-requests', config);
+            const requestsRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/donors/nearby-requests`, config);
             setNearbyRequests(requestsRes.data);
 
         } catch (err) {
@@ -54,7 +54,7 @@ const DonorDashboard = () => {
         navigator.geolocation.getCurrentPosition(async (position) => {
             const { longitude, latitude } = position.coords;
             try {
-                await axios.patch('http://localhost:5000/api/donors/profile', { location: { type: 'Point', coordinates: [longitude, latitude] } }, config);
+                await axios.patch(`${import.meta.env.VITE_API_URL}/api/donors/profile`, { location: { type: 'Point', coordinates: [longitude, latitude] } }, config);
             } catch (err) { console.error('Could not update location:', err); }
         });
     }, [navigate]);
@@ -64,7 +64,7 @@ const DonorDashboard = () => {
         try {
             const token = localStorage.getItem('token');
             const config = { headers: { 'x-auth-token': token } };
-            await axios.post(`http://localhost:5000/api/requests/${requestId}/accept`, {}, config);
+            await axios.post(`${import.meta.env.VITE_API_URL}/api/requests/${requestId}/accept`, {}, config);
             toast.success('Thank you for accepting! The patient has been notified.');
             // Refresh the list of requests after accepting one
             fetchData();

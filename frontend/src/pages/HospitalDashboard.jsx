@@ -17,8 +17,8 @@ const HospitalDashboard = () => {
         const config = { headers: { 'x-auth-token': token } };
         try {
             const [userRes, requestsRes] = await Promise.all([
-                axios.get('http://localhost:5000/api/auth', config),
-                axios.get('http://localhost:5000/api/requests/inprogress', config)
+                axios.get(`${import.meta.env.VITE_API_URL}/api/auth`, config),
+                axios.get(`${import.meta.env.VITE_API_URL}/api/requests/inprogress`, config)
             ]);
             setUser(userRes.data);
             setRequestsInProgress(requestsRes.data);
@@ -39,7 +39,7 @@ const HospitalDashboard = () => {
         try {
             const token = localStorage.getItem('token');
             const config = { headers: { 'x-auth-token': token } };
-            const res = await axios.post('http://localhost:5000/api/hospitals/verify-donation', { donorId, requestId }, config);
+            const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/hospitals/verify-donation`, { donorId, requestId }, config);
             let toastMessage = 'Donation verified successfully!';
             if (res.data.badgeAwarded) {
                 toastMessage += ` The donor has been awarded the "${res.data.badgeAwarded}" badge!`;

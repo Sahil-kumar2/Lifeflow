@@ -20,8 +20,8 @@ const PatientDashboard = () => {
             const config = { headers: { 'x-auth-token': token } };
             try {
                 const [userRes, requestsRes] = await Promise.all([
-                    axios.get('http://localhost:5000/api/auth', config),
-                    axios.get('http://localhost:5000/api/requests/my-requests', config)
+                    axios.get(`${import.meta.env.VITE_API_URL}/api/auth`, config),
+                    axios.get(`${import.meta.env.VITE_API_URL}/api/requests/my-requests`, config)
                 ]);
                 setUser(userRes.data);
                 setMyRequests(requestsRes.data);
@@ -46,9 +46,9 @@ const PatientDashboard = () => {
                 const token = localStorage.getItem('token');
                 const config = { headers: { 'x-auth-token': token } };
                 const newRequest = { ...formData, city: user.city, longitude, latitude };
-                await axios.post('http://localhost:5000/api/requests', newRequest, config);
+                await axios.post(`${import.meta.env.VITE_API_URL}/api/requests`, newRequest, config);
                 toast.success('Blood request created successfully!');
-                const requestsRes = await axios.get('http://localhost:5000/api/requests/my-requests', config);
+                const requestsRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/requests/my-requests`, config);
                 setMyRequests(requestsRes.data);
             } catch (err) {
                 toast.error('Failed to create request.');
