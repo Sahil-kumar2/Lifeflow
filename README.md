@@ -42,3 +42,12 @@ LifeFlow is a full-stack MERN web application that connects patients with nearby
 **Database & Services:** MongoDB Atlas, Twilio API, Google Maps API, Google Gemini API, JWT, bcrypt  
 
 ---
+
+## 👤 Author
+**Sahil Kumar**  
+B.Tech Student | Aspiring Software Development Engineer  
+
+- GitHub: https://github.com/Sahil-kumar2  
+- LinkedIn: https://www.linkedin.com/in/sahil-kumar-873910293  
+- Portfolio: https://portfolio-kappa-pearl-78.vercel.app
+
