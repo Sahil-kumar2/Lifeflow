@@ -1,18 +1,29 @@
 const nodemailer = require('nodemailer');
+const dns = require('dns');
+const util = require('util');
 
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true, // use SSL
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    },
-    family: 4 // Force IPv4 to avoid ENETUNREACH on Render
-});
+const resolve4 = util.promisify(dns.resolve4);
 
 const sendOTP = async (email, otp) => {
     try {
+        // Manually resolve 'smtp.gmail.com' to get an IPv4 address
+        // This bypasses the environment's tendency to use IPv6 which fails on Render
+        const addresses = await resolve4('smtp.gmail.com');
+        const ip = addresses[0];
+
+        const transporter = nodemailer.createTransport({
+            host: ip, // Use the resolved IPv4 address
+            port: 465,
+            secure: true,
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS
+            },
+            tls: {
+                servername: 'smtp.gmail.com' // Required for SSL validation when using IP
+            }
+        });
+
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: email,
