@@ -1,6 +1,6 @@
 // Barrel export for controllers
 module.exports = {
-    AuthController: require('./AuthController'),
+    AuthController: require('./authController'),
     BloodRequestController: require('./BloodRequestController'),
     HospitalController: require('./HospitalController'),
     DonorController: require('./DonorController'),
