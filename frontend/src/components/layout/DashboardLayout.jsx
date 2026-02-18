@@ -51,7 +51,7 @@ const DashboardLayout = () => {
             {/* Sidebar */}
             <div className="hidden md:flex flex-col w-64 bg-white border-r">
                 <div className="flex items-center justify-center h-16 border-b">
-                     <h1 className="text-2xl font-bold text-red-600">LiveFlow 🩸</h1>
+                    <h1 className="text-2xl font-bold text-red-600">LiveFlow 🩸</h1>
                 </div>
                 <div className="flex flex-col flex-grow p-4">
                     <nav className="flex-grow space-y-2">
@@ -78,8 +78,20 @@ const DashboardLayout = () => {
                             </NavLink>
                         )}
                     </nav>
-                    <div className="mt-auto">
-                         <button onClick={handleLogout} className="flex items-center w-full px-4 py-3 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 transition-colors">
+                    <div className="mt-auto mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex items-center space-x-3">
+                            <div className="bg-red-100 p-2 rounded-full">
+                                <User className="h-6 w-6 text-red-600" />
+                            </div>
+                            <div className="overflow-hidden">
+                                <p className="text-sm font-bold text-gray-800 truncate">{user ? user.name : 'User'}</p>
+                                <p className="text-xs text-gray-500 truncate">{user ? user.email : ''}</p>
+                                <p className="text-xs font-semibold text-red-500 uppercase mt-1">{user ? user.role : ''}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <button onClick={handleLogout} className="flex items-center w-full px-4 py-3 text-gray-600 rounded-lg hover:bg-red-100 hover:text-red-600 transition-colors">
                             <LogOut className="h-5 w-5" />
                             <span className="mx-4 font-medium">Logout</span>
                         </button>

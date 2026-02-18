@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { Heart, Droplets, Calendar, Award, CheckCircle } from 'lucide-react';
+import { useSocket } from '../context/SocketContext';
+import { Heart, Droplets, Calendar, Award, CheckCircle, ClipboardList } from 'lucide-react';
 
 const calculateEligibility = (lastDate) => {
     if (!lastDate) return { isEligible: true, daysRemaining: 0 };
@@ -17,23 +18,30 @@ const calculateEligibility = (lastDate) => {
 const DonorDashboard = () => {
     const [donor, setDonor] = useState(null);
     const [nearbyRequests, setNearbyRequests] = useState([]);
+    const [donationHistory, setDonationHistory] = useState([]);
     const [donationCount, setDonationCount] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [processingId, setProcessingId] = useState(null);
     const navigate = useNavigate();
+    const socket = useSocket();
 
     const fetchData = async () => {
         const token = localStorage.getItem('token');
         if (!token) { navigate('/login'); return; }
         const config = { headers: { 'x-auth-token': token } };
         try {
-            const [userRes, donationLogsRes] = await Promise.all([
+
+            const [userRes, historyRes] = await Promise.all([
                 axios.get(`${import.meta.env.VITE_API_URL}/api/auth`, config),
-                axios.get(`${import.meta.env.VITE_API_URL}/api/donors/donation-logs`, config)
+                axios.get(`${import.meta.env.VITE_API_URL}/api/donations/donor-history`, config)
             ]);
+
             setDonor(userRes.data);
-            setDonationCount(donationLogsRes.data.count);
-            
-            // Fetch nearby requests after main data is loaded
+
+            setDonationHistory(historyRes.data);
+            setDonationCount(historyRes.data.length);
+
+            // Fetch nearby requests
             const requestsRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/donors/nearby-requests`, config);
             setNearbyRequests(requestsRes.data);
 
@@ -59,8 +67,43 @@ const DonorDashboard = () => {
         });
     }, [navigate]);
 
+    useEffect(() => {
+        if (!socket) return;
+
+        socket.on('request_created', (newRequest) => {
+            // Optimistically add to nearby requests if it fits criteria (or just add it and let the user filter)
+            // Ideally we should check distance, but for now we'll add it if it's broadly relevant or just refetch.
+            // A simple approach is to refetch nearby requests.
+            // But let's try to add it.
+            setNearbyRequests(prev => [newRequest, ...prev]);
+        });
+
+        socket.on('request_accepted', (updatedRequest) => {
+            setNearbyRequests(prev => prev.filter(req => req._id !== updatedRequest._id));
+        });
+
+        socket.on('request_cancelled', (updatedRequest) => {
+            // If cancelled, it might become available again.
+            // We could add it back.
+            setNearbyRequests(prev => [updatedRequest, ...prev]);
+        });
+
+        socket.on('request_completed', (updatedRequest) => {
+            setNearbyRequests(prev => prev.filter(req => req._id !== updatedRequest._id));
+        });
+
+        return () => {
+            socket.off('request_created');
+            socket.off('request_accepted');
+            socket.off('request_cancelled');
+            socket.off('request_completed');
+        };
+    }, [socket]);
+
     // --- THIS IS THE CORRECTED AND RE-IMPLEMENTED FUNCTION ---
     const handleAccept = async (requestId) => {
+        if (processingId) return;
+        setProcessingId(requestId);
         try {
             const token = localStorage.getItem('token');
             const config = { headers: { 'x-auth-token': token } };
@@ -68,8 +111,10 @@ const DonorDashboard = () => {
             toast.success('Thank you for accepting! The patient has been notified.');
             // Refresh the list of requests after accepting one
             fetchData();
-        } catch (error) { 
+        } catch (error) {
             toast.error("Could not accept the request. It may have been taken by another donor.");
+        } finally {
+            setProcessingId(null);
         }
     };
 
@@ -89,7 +134,7 @@ const DonorDashboard = () => {
             </div>
             <div className="bg-white rounded-lg shadow-md p-6 mb-8">
                 <h3 className="text-xl font-bold text-gray-700 flex items-center mb-4"><Award className="h-6 w-6 mr-3 text-yellow-500" /> Your Achievements</h3>
-                {donor.rewards && donor.rewards.badges.length > 0 ? (<div className="flex flex-wrap gap-4">{donor.rewards.badges.map(badge => (<span key={badge} className="bg-teal-100 text-teal-800 font-semibold px-4 py-1 rounded-full text-sm">{badge}</span>))}</div>) : (<p className="text-gray-600">Your first donation will earn a badge!</p>)}
+                {donor.rewards && donor.rewards.badges.length > 0 ? (<div className="flex flex-wrap gap-4">{donor.rewards.badges.map((badge, index) => (<span key={`${badge}-${index}`} className="bg-teal-100 text-teal-800 font-semibold px-4 py-1 rounded-full text-sm">{badge}</span>))}</div>) : (<p className="text-gray-600">Your first donation will earn a badge!</p>)}
             </div>
 
             {/* Nearby Requests Card - The button is now functional */}
@@ -103,11 +148,20 @@ const DonorDashboard = () => {
                                     <h4 className="font-bold">{req.hospitalName}, {req.city}</h4>
                                     <p className="text-gray-600">Needed: <span className="font-bold text-red-600 text-lg">{req.bloodType}</span></p>
                                 </div>
-                                <button 
-                                    onClick={() => handleAccept(req._id)} 
-                                    className="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition"
+                                <button
+                                    onClick={() => handleAccept(req._id)}
+                                    disabled={processingId !== null}
+                                    className={`font-bold py-2 px-4 rounded-lg transition flex items-center ${processingId === req._id ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-500 hover:bg-green-600 text-white'}`}
                                 >
-                                    I can donate
+                                    {processingId === req._id ? (
+                                        <>
+                                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Processing...
+                                        </>
+                                    ) : 'I can donate'}
                                 </button>
                             </div>
                         ))}
@@ -116,7 +170,48 @@ const DonorDashboard = () => {
                     <p className="text-gray-600">No open blood requests found in your area.</p>
                 )}
             </div>
-        </div>
+
+            {/* Donation History Section */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+                <h3 className="text-xl font-bold text-gray-700 flex items-center mb-4">
+                    <ClipboardList className="h-6 w-6 mr-3 text-purple-500" /> Donation History
+                </h3>
+                {donationHistory.length > 0 ? (
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hospital</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Blood Type</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Units</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {donationHistory.map((log) => (
+                                    <tr key={log._id}>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            {new Date(log.donationDate).toLocaleDateString()}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                            {log.hospital ? log.hospital.name : 'Unknown Hospital'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            {log.bloodRequest ? log.bloodRequest.bloodType : 'N/A'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            {log.unitsDonated}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    <p className="text-gray-600">You haven't made any donations yet.</p>
+                )}
+            </div>
+        </div >
     );
 };
 export default DonorDashboard;
