@@ -6,22 +6,25 @@ const resolve4 = util.promisify(dns.resolve4);
 
 const sendOTP = async (email, otp) => {
     try {
-        // Manually resolve 'smtp.gmail.com' to get an IPv4 address
-        // This bypasses the environment's tendency to use IPv6 which fails on Render
+        console.log('Attempting to resolve smtp.gmail.com...');
         const addresses = await resolve4('smtp.gmail.com');
         const ip = addresses[0];
+        console.log(`Resolved IP: ${ip}`);
 
         const transporter = nodemailer.createTransport({
-            host: ip, // Use the resolved IPv4 address
-            port: 465,
-            secure: true,
+            host: ip,
+            port: 587, // Try port 587 (STARTTLS) instead of 465
+            secure: false,
             auth: {
                 user: process.env.EMAIL_USER,
                 pass: process.env.EMAIL_PASS
             },
             tls: {
-                servername: 'smtp.gmail.com' // Required for SSL validation when using IP
-            }
+                servername: 'smtp.gmail.com',
+                rejectUnauthorized: false // Temporary: for debugging purposes
+            },
+            debug: true, // Enable nodemailer debug output
+            logger: true // Log to console
         });
 
         const mailOptions = {
@@ -31,10 +34,11 @@ const sendOTP = async (email, otp) => {
             text: `Your OTP is: ${otp}. It is valid for 5 minutes.`
         };
 
+        console.log(`Sending email to ${email} via ${ip}:587...`);
         await transporter.sendMail(mailOptions);
-        console.log(`OTP sent to ${email}`);
+        console.log(`OTP sent successfully to ${email}`);
     } catch (error) {
-        console.error('Error sending email:', error);
+        console.error('Detailed Email Error:', error);
         throw new Error('Email functionality failed');
     }
 };
