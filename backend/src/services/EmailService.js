@@ -1,44 +1,24 @@
-const nodemailer = require('nodemailer');
-const dns = require('dns');
-const util = require('util');
+const SibApiV3Sdk = require('sib-api-v3-sdk');
 
-const resolve4 = util.promisify(dns.resolve4);
+const defaultClient = SibApiV3Sdk.ApiClient.instance;
+const apiKey = defaultClient.authentications['api-key'];
+apiKey.apiKey = process.env.BREVO_API_KEY;
+
+const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
 
 const sendOTP = async (email, otp) => {
     try {
-        console.log('Attempting to resolve smtp.gmail.com...');
-        const addresses = await resolve4('smtp.gmail.com');
-        const ip = addresses[0];
-        console.log(`Resolved IP: ${ip}`);
+        const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+        sendSmtpEmail.subject = "Your OTP for LifeFlow Verification";
+        sendSmtpEmail.htmlContent = `<html><body><p>Your OTP is: <strong>${otp}</strong>. It is valid for 5 minutes.</p></body></html>`;
+        // Sender must be a verified email in Brevo. Using your signup email for now.
+        sendSmtpEmail.sender = { "name": "LifeFlow", "email": "sahilkumaratwork@gmail.com" };
+        sendSmtpEmail.to = [{ "email": email }];
 
-        const transporter = nodemailer.createTransport({
-            host: ip,
-            port: 587, // Try port 587 (STARTTLS) instead of 465
-            secure: false,
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS
-            },
-            tls: {
-                servername: 'smtp.gmail.com',
-                rejectUnauthorized: false // Temporary: for debugging purposes
-            },
-            debug: true, // Enable nodemailer debug output
-            logger: true // Log to console
-        });
-
-        const mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: email,
-            subject: 'Your OTP for LifeFlow Verification',
-            text: `Your OTP is: ${otp}. It is valid for 5 minutes.`
-        };
-
-        console.log(`Sending email to ${email} via ${ip}:587...`);
-        await transporter.sendMail(mailOptions);
-        console.log(`OTP sent successfully to ${email}`);
+        const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
+        console.log(`OTP sent successfully to ${email} via Brevo. MessageId: ${data.messageId}`);
     } catch (error) {
-        console.error('Detailed Email Error:', error);
+        console.error('Brevo API Error:', error);
         // Fallback: If email fails, log OTP to console so user can verify
         console.warn(`CRITICAL FALLBACK: OTP for ${email} is ${otp}`);
         console.log('Continuing registration despite email failure.');
