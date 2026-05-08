@@ -1,6 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/db');
+const { connectRedis } = require('./config/redis');
+const { initSMSQueue } = require('./config/queue');
+const { initSMSWorker } = require('./workers/smsWorker');
 const ensureGeoIndex = require('./utils/ensureIndexes');
 const { auth, requests, hospitals, donors, chat, donations } = require('./routes').api;
 
@@ -10,6 +13,13 @@ module.exports = async () => {
 
     // Ensure geospatial index exists
     await ensureGeoIndex();
+
+    // Connect to Redis if configured; continue without cache if unavailable
+    await connectRedis();
+
+    // Initialize SMS Queue and Worker for async job processing
+    initSMSQueue();
+    await initSMSWorker();
 
     const app = express();
 

@@ -1,9 +1,13 @@
 const { BloodRequest, User } = require('../models');
-const twilio = require('twilio');
-
-const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+const { deleteByPattern, getCache, setCache } = require('../utils/cache');
+const { getSMSQueue } = require('../config/queue');
 
 class BloodRequestService {
+    static async invalidateRequestCaches() {
+        await deleteByPattern('blood-requests:*');
+        await deleteByPattern('donor:nearby-requests:*');
+    }
+
     static async createRequest(userId, requestData) {
         const { bloodType, unitsRequired, hospitalName, city, longitude, latitude } = requestData;
 
@@ -20,15 +24,16 @@ class BloodRequestService {
 
         const bloodRequest = await newRequest.save();
 
-        // Notify nearby donors via SMS
-        await this.notifyNearbyDonors(bloodType, hospitalName, city, longitude, latitude);
+        await this.invalidateRequestCaches();
+
+        await this.notifyNearbyDonors(bloodRequest._id, bloodType, hospitalName, city, longitude, latitude);
 
         return bloodRequest;
     }
 
-    static async notifyNearbyDonors(bloodType, hospitalName, city, longitude, latitude) {
+    static async notifyNearbyDonors(requestId, bloodType, hospitalName, city, longitude, latitude) {
         try {
-            const searchRadiusDegrees = 0.18; // Approx. 20km
+            const searchRadiusDegrees = 0.18;
             const boundingBox = [
                 [longitude - searchRadiusDegrees, latitude - searchRadiusDegrees],
                 [longitude + searchRadiusDegrees, latitude + searchRadiusDegrees]
@@ -45,21 +50,40 @@ class BloodRequestService {
             });
 
             if (nearbyDonors.length > 0) {
-                console.log(`Found ${nearbyDonors.length} nearby donors to notify via SMS.`);
+                console.log(`📨 Found ${nearbyDonors.length} nearby donors. Queueing SMS notifications...`);
                 const messageBody = `Urgent need for ${bloodType} blood at ${hospitalName}, ${city}. Can you help? Log in to your LiveFlow account to respond.`;
 
-                const promises = nearbyDonors.map(donor => {
+                const smsQueue = getSMSQueue();
+                if (!smsQueue) {
+                    console.warn('⚠️  SMS Queue not available - falling back to direct SMS');
+                    // Fallback to direct sending if queue not available
+                    return;
+                }
+
+                // Queue SMS job for each donor (non-blocking)
+                const jobPromises = nearbyDonors.map(donor => {
                     if (donor.phone && typeof donor.phone === 'string') {
-                        return client.messages.create({
-                            body: messageBody,
-                            from: process.env.TWILIO_PHONE_NUMBER,
-                            to: `+91${donor.phone}`
-                        })
-                            .then(message => console.log(`SMS sent to ${donor.name}: ${message.sid}`))
-                            .catch(err => console.error(`Failed to send SMS to ${donor.name}:`, err.message));
+                        const jobId = `sms-${requestId}-${donor._id}`;
+                        return smsQueue.add(
+                            'send-sms',
+                            {
+                                requestId,
+                                donorPhone: donor.phone,
+                                donorName: donor.name,
+                                messageBody: messageBody
+                            },
+                            {
+                                jobId,
+                                priority: 10  // High priority for urgent notifications
+                            }
+                        )
+                            .then(job => console.log(`✅ SMS job queued for ${donor.name} (Job ID: ${job.id})`))
+                            .catch(err => console.error(`❌ Failed to queue SMS for ${donor.name}:`, err.message));
                     }
                 });
-                await Promise.all(promises);
+
+                await Promise.all(jobPromises);
+                console.log(`📨 All SMS jobs queued for ${nearbyDonors.length} donors`);
             }
         } catch (err) {
             console.error('Error notifying donors:', err);
@@ -72,7 +96,6 @@ class BloodRequestService {
 
         const newStatus = user.role === 'hospital' ? 'Completed' : 'In Progress';
 
-        // Atomic update to prevent race conditions
         const request = await BloodRequest.findOneAndUpdate(
             { _id: requestId, status: 'Pending' },
             {
@@ -80,11 +103,14 @@ class BloodRequestService {
                 acceptedBy: userId
             },
             { new: true }
-        ).populate('requester', 'name').populate('acceptedBy', 'name'); // Populate acceptedBy too
+        ).populate('requester', 'name').populate('acceptedBy', 'name');
 
         if (!request) {
             throw new Error('Request not found or already accepted');
         }
+
+        await this.invalidateRequestCaches();
+
         return request;
     }
 
@@ -96,6 +122,9 @@ class BloodRequestService {
         request.acceptedBy = null;
         request.cancellationReason = reason;
         await request.save();
+
+        await this.invalidateRequestCaches();
+
         return request;
     }
 
@@ -105,26 +134,51 @@ class BloodRequestService {
 
         request.status = 'Completed';
         await request.save();
+
+        await this.invalidateRequestCaches();
+
         return request;
     }
 
     static async getUserRequests(userId) {
-        const requests = await BloodRequest.find({ requester: userId }).sort({ createdAt: -1 });
+        const cacheKey = `blood-requests:user:${userId}`;
+        const cachedRequests = await getCache(cacheKey);
+        if (cachedRequests) {
+            return cachedRequests;
+        }
+
+        const requests = await BloodRequest.find({ requester: userId }).sort({ createdAt: -1 }).lean();
+        await setCache(cacheKey, requests, 30);
         return requests;
     }
 
     static async getInProgressRequests() {
-        // Only fetch requests that are currently in progress and need verification
+        const cacheKey = 'blood-requests:in-progress';
+        const cachedRequests = await getCache(cacheKey);
+        if (cachedRequests) {
+            return cachedRequests;
+        }
+
         const requests = await BloodRequest.find({
             status: 'In Progress'
         })
             .populate('acceptedBy', ['name'])
-            .sort({ createdAt: -1 });
+            .sort({ createdAt: -1 })
+            .lean();
+
+        await setCache(cacheKey, requests, 20);
         return requests;
     }
 
     static async getOpenRequests() {
-        const requests = await BloodRequest.find({ status: 'Pending' }).sort({ createdAt: -1 });
+        const cacheKey = 'blood-requests:open';
+        const cachedRequests = await getCache(cacheKey);
+        if (cachedRequests) {
+            return cachedRequests;
+        }
+
+        const requests = await BloodRequest.find({ status: 'Pending' }).sort({ createdAt: -1 }).lean();
+        await setCache(cacheKey, requests, 20);
         return requests;
     }
 }

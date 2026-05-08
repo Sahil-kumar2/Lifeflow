@@ -1,4 +1,5 @@
 const { User, DonationLog, BloodRequest } = require('../models');
+const { deleteByPattern, deleteCache } = require('../utils/cache');
 
 class HospitalService {
     static async verifyDonation(hospitalUserId, donorId, requestId) {
@@ -7,21 +8,18 @@ class HospitalService {
             throw new Error('User is not authorized');
         }
 
-        // Update blood request
         const request = await BloodRequest.findById(requestId);
         if (request) {
             request.status = 'Completed';
             await request.save();
         }
 
-        // Update donor
         const donor = await User.findById(donorId);
         if (!donor) {
             throw new Error('Donor not found');
         }
         donor.lastDonationDate = new Date();
 
-        // Create donation log
         const newLog = new DonationLog({
             donor: donorId,
             hospital: hospitalUserId,
@@ -29,7 +27,6 @@ class HospitalService {
         });
         await newLog.save();
 
-        // Award badges for milestones
         const donationCount = await DonationLog.countDocuments({ donor: donorId });
         let badgeAwarded = null;
 
@@ -40,22 +37,29 @@ class HospitalService {
             donor.rewards.badges = [];
         }
 
-        if (donationCount === 1 && !donor.rewards.badges.includes("First Donation")) {
-            donor.rewards.badges.push("First Donation");
-            badgeAwarded = "First Donation";
+        if (donationCount === 1 && !donor.rewards.badges.includes('First Donation')) {
+            donor.rewards.badges.push('First Donation');
+            badgeAwarded = 'First Donation';
         }
-        if (donationCount === 5 && !donor.rewards.badges.includes("5 Donations Club")) {
-            donor.rewards.badges.push("5 Donations Club");
-            badgeAwarded = "5 Donations Club";
+        if (donationCount === 5 && !donor.rewards.badges.includes('5 Donations Club')) {
+            donor.rewards.badges.push('5 Donations Club');
+            badgeAwarded = '5 Donations Club';
         }
-        if (donationCount === 10 && !donor.rewards.badges.includes("Blood Hero")) {
-            donor.rewards.badges.push("Blood Hero");
-            badgeAwarded = "Blood Hero";
+        if (donationCount === 10 && !donor.rewards.badges.includes('Blood Hero')) {
+            donor.rewards.badges.push('Blood Hero');
+            badgeAwarded = 'Blood Hero';
         }
 
         if (badgeAwarded) {
             await donor.save();
         }
+
+        await deleteByPattern('blood-requests:*');
+        await deleteByPattern('donor:nearby-requests:*');
+        await deleteCache([
+            `donation-logs:${donorId}`,
+            `auth:profile:${donorId}`,
+        ]);
 
         return { msg: 'Donation successfully verified.', badgeAwarded };
     }

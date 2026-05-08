@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 const { sendOTP } = require('./EmailService');
+const { deleteCache, getCache, setCache } = require('../utils/cache');
 
 class AuthService {
     static async register(userData) {
@@ -12,8 +13,6 @@ class AuthService {
             if (user.isVerified) {
                 throw new Error('User already exists');
             } else {
-                // Determine if we should update the existing unverified user or just resend OTP
-                // For simplicity, let's update the details and resend OTP
                 user.name = name;
                 user.password = password;
                 user.phone = phone;
@@ -25,7 +24,6 @@ class AuthService {
             user = new User({ name, email, password, phone, role, city, bloodType });
         }
 
-        // Save location if provided
         if (longitude && latitude) {
             user.location = {
                 type: 'Point',
@@ -33,18 +31,16 @@ class AuthService {
             };
         }
 
-        // Generate OTP
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         user.otp = otp;
-        user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+        user.otpExpires = Date.now() + 10 * 60 * 1000;
 
         await user.save();
 
         try {
             await sendOTP(email, otp);
         } catch (err) {
-            console.error("Failed to send OTP email:", err);
-            // Optionally delete user or handle error
+            console.error('Failed to send OTP email:', err);
             throw new Error('Failed to send verification email');
         }
 
@@ -70,6 +66,8 @@ class AuthService {
         user.otpExpires = undefined;
         await user.save();
 
+        await deleteCache(`auth:profile:${user.id}`);
+
         const payload = { user: { id: user.id } };
         const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: 3600 });
 
@@ -88,7 +86,6 @@ class AuthService {
         }
 
         if (!user.isVerified) {
-            // Option to resend OTP here if needed, or just block
             throw new Error('Account not verified. Please verify your email.');
         }
 
@@ -99,10 +96,18 @@ class AuthService {
     }
 
     static async getProfile(userId) {
-        const user = await User.findById(userId).select('-password');
+        const cacheKey = `auth:profile:${userId}`;
+        const cachedProfile = await getCache(cacheKey);
+        if (cachedProfile) {
+            return cachedProfile;
+        }
+
+        const user = await User.findById(userId).select('-password').lean();
         if (!user) {
             throw new Error('User not found');
         }
+
+        await setCache(cacheKey, user, 120);
         return user;
     }
 }

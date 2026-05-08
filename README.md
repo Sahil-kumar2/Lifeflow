@@ -22,6 +22,7 @@ LifeFlow is a full-stack MERN web application that connects patients with nearby
 - Frontend: React + Tailwind CSS
 - Backend: Node.js + Express (REST APIs)
 - Database: MongoDB with geospatial indexing
+- Cache / Rate Limiting: Redis
 - Messaging: Twilio API for SMS alerts
 - Maps: Google Maps API
 - AI: Google Gemini API
@@ -39,7 +40,7 @@ LifeFlow is a full-stack MERN web application that connects patients with nearby
 ## 🛠 Tech Stack
 **Frontend:** React, Tailwind CSS, Vite  
 **Backend:** Node.js, Express  
-**Database & Services:** MongoDB Atlas, Twilio API, Google Maps API, Google Gemini API, JWT, bcrypt  
+**Database & Services:** MongoDB Atlas, Redis, Twilio API, Google Maps API, Google Gemini API, JWT, bcrypt  
 
 ---
 

@@ -1,9 +1,18 @@
 const { User, DonationLog, BloodRequest } = require('../models');
+const { deleteCache, getCache, setCache } = require('../utils/cache');
 
 class DonorService {
     static async getDonationLogs(donorId) {
-        const logs = await DonationLog.find({ donor: donorId });
-        return { count: logs.length, logs };
+        const cacheKey = `donation-logs:${donorId}`;
+        const cachedLogs = await getCache(cacheKey);
+        if (cachedLogs) {
+            return cachedLogs;
+        }
+
+        const logs = await DonationLog.find({ donor: donorId }).lean();
+        const response = { count: logs.length, logs };
+        await setCache(cacheKey, response, 60);
+        return response;
     }
 
     static async updateProfile(userId, updates) {
@@ -15,10 +24,22 @@ class DonorService {
         if (!updatedUser) {
             throw new Error('User not found');
         }
+
+        await deleteCache([
+            `auth:profile:${userId}`,
+            `donor:nearby-requests:${userId}`,
+        ]);
+
         return updatedUser;
     }
 
     static async getNearbyRequests(userId) {
+        const cacheKey = `donor:nearby-requests:${userId}`;
+        const cachedRequests = await getCache(cacheKey);
+        if (cachedRequests) {
+            return cachedRequests;
+        }
+
         const user = await User.findById(userId);
         if (!user || !user.location) {
             throw new Error('Your location is not set.');
@@ -35,17 +56,19 @@ class DonorService {
             role: 'patient',
             location: { $geoWithin: { $box: boundingBox } }
         });
-        const requesterIds = requesters.map(r => r._id);
-        
+        const requesterIds = requesters.map((requester) => requester._id);
+
         if (requesterIds.length === 0) {
+            await setCache(cacheKey, [], 30);
             return [];
         }
-        
+
         const nearbyRequests = await BloodRequest.find({
             requester: { $in: requesterIds },
-            status: 'Open'
-        }).sort({ createdAt: -1 });
-        
+            status: 'Pending'
+        }).sort({ createdAt: -1 }).lean();
+
+        await setCache(cacheKey, nearbyRequests, 30);
         return nearbyRequests;
     }
 }
